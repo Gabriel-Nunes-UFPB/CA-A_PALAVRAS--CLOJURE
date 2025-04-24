@@ -1,0 +1,161 @@
+(ns caca-palavras.completo
+  (:require [clojure.string :as str])) ;; Importa funções úteis para manipular strings
+
+(def tamanho 18) ;; Define o tamanho da grade (18x18)
+
+(def palavras ["CASA" "LIVRO" "PROJETO" "ESCOLA" "CURSO"
+           	"MATEMATICA" "PARADIGMA" "LINGUAGEM" "SISTEMAS" "CARREIRA"]) ;; Lista de palavras que estarão escondidas
+
+(def direcoes
+  {:direita 	[0 1]   ;; Vai para a direita (mesma linha, próxima coluna)
+   :esquerda	[0 -1]  ;; Vai para a esquerda
+   :baixo   	[1 0]   ;; Vai para baixo (mesma coluna, próxima linha)
+   :cima    	[-1 0]  ;; Vai para cima
+   :diagonal1   [1 1]   ;; Diagonal pra baixo e direita
+   :diagonal2   [1 -1]  ;; Diagonal pra baixo e esquerda
+   :diagonal3   [-1 1]  ;; Diagonal pra cima e direita
+   :diagonal4   [-1 -1] ;; Diagonal pra cima e esquerda
+  })
+
+;; Cria uma grade (matriz) vazia, preenchida com nil
+(defn grade-vazia []
+  (vec (repeat tamanho (vec (repeat tamanho nil)))))
+
+;; Verifica se a coordenada está dentro da grade (não sai dos limites)
+(defn dentro-da-grade? [linha col]
+  (and (>= linha 0) (< linha tamanho)
+   	(>= col 0) (< col tamanho)))
+
+;; Verifica se a palavra pode ser colocada em determinada posição e direção
+(defn pode-inserir? [grade palavra linha col [dl dc]]
+  (every?
+   (fn [i]
+     (let [l (+ linha (* i dl)) ;; Calcula linha do caractere i
+           c (+ col (* i dc))  ;; Calcula coluna do caractere i
+           letra (nth palavra i)] ;; Pega a letra da palavra
+       (and (dentro-da-grade? l c) ;; Verifica se está dentro da grade
+            (or (nil? (get-in grade [l c])) ;; Pode colocar se estiver vazio
+                (= (get-in grade [l c]) (str letra)))))) ;; Ou se a letra já estiver igual (sobreposição correta)
+   (range (count palavra))))
+
+;; Insere a palavra na grade a partir de uma posição e direção
+(defn inserir-palavra [grade palavra linha col [dl dc]]
+  (reduce
+   (fn [g i]
+     (let [l (+ linha (* i dl))
+           c (+ col (* i dc))
+           letra (str (nth palavra i))] ;; Converte letra para string
+       (assoc-in g [l c] letra))) ;; Coloca a letra na posição certa
+   grade
+   (range (count palavra))))
+
+;; Tenta inserir a palavra em posições aleatórias até conseguir (ou tenta 100 vezes)
+(defn inserir-palavra-aleatoria [grade palavra]
+  (loop [tentativas 0]
+    (if (>= tentativas 100)
+      grade ;; Se não conseguir, retorna a grade do jeito que está
+      (let [linha (rand-int tamanho)
+            col (rand-int tamanho)
+            [_ dir] (rand-nth (seq direcoes))] ;; Pega uma direção aleatória
+        (if (pode-inserir? grade palavra linha col dir)
+          (inserir-palavra grade palavra linha col dir)
+          (recur (inc tentativas)))))))
+
+;; Preenche os espaços vazios da grade com letras aleatórias
+(defn preencher-com-letras [grade]
+  (let [letras (map str (seq "ABCDEFGHIJKLMNOPQRSTUVWXYZ"))]
+    (mapv (fn [linha]
+            (mapv (fn [celula]
+                    (if (nil? celula)
+                      (rand-nth letras) ;; Se estiver vazio, preenche com letra aleatória
+                      celula))
+                  linha))
+          grade)))
+
+;; Gera a grade final com todas as palavras colocadas e o restante preenchido
+(defn gerar-grade [palavras]
+  (->> palavras
+       (reduce inserir-palavra-aleatoria (grade-vazia)) ;; Insere todas as palavras
+       preencher-com-letras)) ;; Preenche o resto com letras aleatórias
+
+;; Procura uma palavra em uma direção específica
+(defn procurar-em-direcao [grade palavra linha col [dl dc]]
+  (let [posicoes (for [i (range (count palavra))]
+                   [(+ linha (* i dl)) (+ col (* i dc))])] ;; Gera as coordenadas que a palavra ocuparia
+    (if (every?
+         (fn [[[l c] i]]
+           (and (dentro-da-grade? l c)
+                (= (get-in grade [l c]) (str (nth palavra i)))))
+         (map vector posicoes (range (count palavra))))
+      posicoes ;; Se encontrou todas as letras, retorna as posições
+      nil)))
+
+;; Procura a palavra na grade em todas as direções possíveis
+(defn procurar-palavra [grade palavra]
+  (first
+   (for [linha (range tamanho)
+         col   (range tamanho)
+         [_ dir] direcoes
+         :let [resultado (procurar-em-direcao grade palavra linha col dir)]
+         :when resultado]
+     resultado))) ;; Retorna a primeira ocorrência encontrada
+
+;; Destaca as letras encontradas colocando * antes e depois
+(defn destacar-palavra [grade posicoes]
+  (map-indexed
+   (fn [linha-i linha]
+     (map-indexed
+      (fn [col-i letra]
+        (if (some #(= [linha-i col-i] %) posicoes)
+          (str "*" letra "*") ;; Adiciona asteriscos se a posição estiver na lista
+          letra))
+      linha))
+   grade))
+
+;; Imprime a grade bonitinha no terminal
+(defn imprimir-grade [grade]
+  (doseq [linha grade]
+    (println (str/join " " linha))))
+
+;; Função principal que executa o jogo
+(defn iniciar-jogo []
+  (let [grade-final (gerar-grade palavras)] ;; Gera a grade com palavras
+    (println "\nGrade gerada automaticamente:")
+    (imprimir-grade grade-final)
+
+    (loop [encontradas #{}
+           grade grade-final]
+      (println "\nDigite uma palavra para buscar (ou 'sair' para encerrar):")
+      (let [entrada (read-line)
+            palavra (str/upper-case entrada)]
+        (cond
+          (= palavra "SAIR")
+          (println "\nJogo encerrado. Até logo!")
+
+          (not (some #(= palavra %) palavras))
+          (do
+            (println "Essa palavra não está na lista do caça-palavras.")
+            (recur encontradas grade))
+
+          (encontradas palavra)
+          (do
+            (println "Você já encontrou essa palavra.")
+            (recur encontradas grade))
+
+          :else
+          (let [posicoes (procurar-palavra grade-final palavra)]
+            (if posicoes
+              (let [nova-grade (destacar-palavra grade posicoes)
+                    novo-encontradas (conj encontradas palavra)]
+                (println (str "\nPalavra '" palavra "' encontrada!\n"))
+                (imprimir-grade nova-grade)
+                (if (= (count novo-encontradas) (count palavras))
+                  (println "\n🎉 Parabéns! Você encontrou todas as palavras! 🎉")
+                  (recur novo-encontradas nova-grade)))
+              (do
+                (println (str "Palavra '" palavra "' não foi encontrada na grade."))
+                (recur encontradas grade)))))))))
+
+;; Inicia o jogo
+(iniciar-jogo)
+
