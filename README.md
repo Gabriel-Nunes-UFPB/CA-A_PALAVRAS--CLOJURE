@@ -23,7 +23,7 @@ Este projeto é um jogo de *caça-palavras* desenvolvido em *Clojure*, onde o jo
    git clone https://github.com/seu-usuario/nome-do-repositorio.git
    cd nome-do-repositorio
 
-##Desenvolvido por
+## Desenvolvido por:
 Hilton Carneiro De Oliveira Neto Segundo
 
 Gabriel Nunes Gomes
